@@ -1,66 +1,66 @@
 const { 
     default: makeWASocket, 
     useMultiFileAuthState, 
-    fetchLatestBaileysVersion, 
-    makeCacheableSignalKeyStore 
+    disconnectReason 
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
-const fs = require('fs');
 
-async function startBot() {
-    // إعداد الجلسة وحفظ الملفات في مجلد session
+async function startSaeedBot() {
     const { state, saveCreds } = await useMultiFileAuthState('./session');
-    const { version } = await fetchLatestBaileysVersion();
 
     const sock = makeWASocket({
-        version,
-        logger: pino({ level: 'fatal' }),
-        printQRInTerminal: false, // تعطيل QR لأننا سنستخدم الكود
-        auth: {
-            creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
-        },
-        browser: ["Ubuntu", "Chrome", "20.0.04"]
+        logger: pino({ level: 'silent' }),
+        auth: state,
+        printQRInTerminal: true,
+        browser: ["Saeed Bot", "Chrome", "1.0.0"]
     });
 
-    // طلب كود الربط إذا لم يكن الحساب مسجلاً
-    if (!sock.authState.creds.registered) {
-        
-        // --- تعديلك هنا يا سعيد ---
-        const myNumber = "967770179625"; // ضع رقمك هنا بالصيغة الدولية
-        // -------------------------
-
-        console.log(`\n⏳ جاري طلب كود الربط للرقم: ${myNumber}...`);
-        
-        setTimeout(async () => {
-            try {
-                let code = await sock.requestPairingCode(myNumber);
-                code = code?.match(/.{1,4}/g)?.join("-") || code;
-                console.log("\n" + "=".repeat(40));
-                console.log("✅ كود الربط الخاص بك هو: " + code);
-                console.log("=".repeat(40) + "\n");
-                console.log("افتح واتساب > الأجهزة المرتبطة > ربط هاتف > أدخل الكود أعلاه.");
-            } catch (error) {
-                console.log("❌ فشل طلب الكود: ", error.message);
-            }
-        }, 8000); // انتظار 8 ثوانٍ لضمان استقرار السيرفر
-    }
-
-    // حفظ تحديثات الجلسة
     sock.ev.on('creds.update', saveCreds);
 
-    // متابعة حالة الاتصال
+    sock.ev.on('messages.upsert', async ({ messages }) => {
+        const msg = messages[0];
+        if (!msg.message || msg.key.fromMe) return;
+
+        const messageType = Object.keys(msg.message)[0];
+        const body = messageType === 'conversation' ? msg.message.conversation : 
+                     messageType === 'extendedTextMessage' ? msg.message.extendedTextMessage.text : '';
+
+        const from = msg.key.remoteJid;
+
+        // --- قسم الأوامر ---
+        if (body === '.قائمة' || body === '.اوامر') {
+            const menuText = `
+🌟 *أهلاً بك في بوت سعيد الذبحاني* 🌟
+
+🤖 *الأوامر المتاحة حالياً:*
+1️⃣ *.اوامر* : لعرض هذه القائمة.
+2️⃣ *.فحص* : للتأكد من سرعة البوت.
+3️⃣ *.وقت* : لمعرفة التاريخ والوقت الحالي.
+
+⚠️ _سيتم إضافة ميزات التحميل قريباً!_
+            `;
+            await sock.sendMessage(from, { text: menuText });
+        }
+
+        if (body === '.فحص') {
+            await sock.sendMessage(from, { text: '🚀 البوت يعمل بأقصى سرعة على سيرفرات GitHub!' });
+        }
+
+        if (body === '.وقت') {
+            const now = new Date().toLocaleString('ar-YE');
+            await sock.sendMessage(from, { text: `📅 الوقت الحالي في اليمن: \n${now}` });
+        }
+    });
+
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect } = update;
-        if (connection === 'open') {
-            console.log("\n🚀 [مبروك يا سعيد] البوت متصل الآن وشغال من سيرفرات GitHub!");
-        }
         if (connection === 'close') {
-            console.log("⚠️ انقطع الاتصال، جاري إعادة التشغيل...");
-            startBot();
+            const shouldReconnect = lastDisconnect.error?.output?.statusCode !== 401;
+            if (shouldReconnect) startSaeedBot();
+        } else if (connection === 'open') {
+            console.log('✅ تم تفعيل الأوامر! جرب أرسل (.قائمة) في الواتساب الآن.');
         }
     });
 }
 
-// البدء
-startBot();
+startSaeedBot();
